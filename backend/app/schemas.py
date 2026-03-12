@@ -65,3 +65,35 @@ class MenuSourceOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class PriceSnapshotOut(BaseModel):
+    id: int
+    commodity_name: str
+    report_id: str
+    report_title: Optional[str] = None
+    market_name: Optional[str] = None
+    office_name: Optional[str] = None
+    price_low: Optional[float] = None
+    price_high: Optional[float] = None
+    price_avg: Optional[float] = None
+    unit: Optional[str] = None
+    report_date: Optional[str] = None
+    source: str
+
+    class Config:
+        from_attributes = True
+
+
+class IngredientPricingTrendOut(BaseModel):
+    ingredient_id: int
+    ingredient_name: str
+    commodity_name: Optional[str] = None
+    snapshot_count: int
+    latest_price_avg: Optional[float] = None
+    min_price_avg: Optional[float] = None
+    max_price_avg: Optional[float] = None
+    avg_price_avg: Optional[float] = None
+    trend: str
+    latest_unit: Optional[str] = None
+    snapshots: List[PriceSnapshotOut]
