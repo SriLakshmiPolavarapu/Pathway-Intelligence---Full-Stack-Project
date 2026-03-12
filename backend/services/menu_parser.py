@@ -1,9 +1,11 @@
+import io
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import google.generativeai as genai
 import requests
 from bs4 import BeautifulSoup
+from PIL import Image
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -28,6 +30,57 @@ def fetch_menu_text_from_url(url: str) -> str:
     return "\n".join(cleaned_lines[:400])
 
 
+def clean_model_text(raw_text: str) -> str:
+    raw_text = raw_text.strip()
+    if raw_text.startswith("```"):
+        raw_text = raw_text.replace("```json", "").replace("```", "").strip()
+    return raw_text
+
+
+def build_image_extraction_prompt(restaurant_name: Optional[str] = None) -> str:
+    restaurant_context = f"Restaurant name: {restaurant_name}\n" if restaurant_name else ""
+
+    return f"""
+You are reading a restaurant menu image.
+
+{restaurant_context}
+Extract the menu into clean plain text.
+Rules:
+- Return ONLY plain text.
+- Preserve dish names and descriptions.
+- Group dishes by section if visible.
+- Do not invent dishes that are not visible.
+- Ignore decorative elements and page styling.
+- Fix obvious OCR issues when confidence is high.
+- Keep prices if visible.
+
+Format example:
+SALADS
+Dish Name - description - price
+
+SANDWICHES
+Dish Name - description - price
+""".strip()
+
+
+def extract_menu_text_from_image(
+    image_bytes: bytes,
+    restaurant_name: Optional[str] = None,
+) -> str:
+    image = Image.open(io.BytesIO(image_bytes))
+    model = genai.GenerativeModel(settings.GEMINI_MODEL)
+
+    prompt = build_image_extraction_prompt(restaurant_name=restaurant_name)
+    response = model.generate_content([prompt, image])
+
+    extracted_text = clean_model_text(response.text)
+
+    if not extracted_text:
+        raise ValueError("Failed to extract text from menu image.")
+
+    return extracted_text
+
+
 def build_prompt(menu_text: str, restaurant_name: Optional[str] = None) -> str:
     restaurant_context = f"Restaurant name: {restaurant_name}\n" if restaurant_name else ""
 
@@ -38,6 +91,8 @@ Your task is to parse the restaurant menu below into structured recipes.
 For each dish, infer a likely ingredient list and estimated quantities.
 Be realistic but concise. If exact quantities are unknown, estimate reasonable values.
 Do not skip dishes that seem ambiguous; make your best estimate and include a confidence note when needed.
+Ignore section headers like SALADS, SANDWICHES, SMALL PLATES unless useful for context.
+Treat each actual dish as a recipe entry.
 
 {restaurant_context}
 Return ONLY valid JSON in this exact format:
@@ -69,16 +124,12 @@ Menu text:
 
 
 def parse_menu_with_gemini(menu_text: str, restaurant_name: Optional[str] = None) -> Dict[str, Any]:
-    #model = genai.GenerativeModel("gemini-1.5-flash")
     model = genai.GenerativeModel(settings.GEMINI_MODEL)
 
     prompt = build_prompt(menu_text=menu_text, restaurant_name=restaurant_name)
     response = model.generate_content(prompt)
 
-    raw_text = response.text.strip()
-
-    if raw_text.startswith("```"):
-        raw_text = raw_text.replace("```json", "").replace("```", "").strip()
+    raw_text = clean_model_text(response.text)
 
     try:
         parsed = json.loads(raw_text)
@@ -89,6 +140,21 @@ def parse_menu_with_gemini(menu_text: str, restaurant_name: Optional[str] = None
         raise ValueError("Gemini response missing 'recipes' list.")
 
     return parsed
+
+
+def parse_menu_image_with_gemini(
+    image_bytes: bytes,
+    restaurant_name: Optional[str] = None,
+) -> Tuple[str, Dict[str, Any]]:
+    extracted_menu_text = extract_menu_text_from_image(
+        image_bytes=image_bytes,
+        restaurant_name=restaurant_name,
+    )
+    parsed_menu = parse_menu_with_gemini(
+        menu_text=extracted_menu_text,
+        restaurant_name=restaurant_name,
+    )
+    return extracted_menu_text, parsed_menu
 
 
 def get_or_create_ingredient(db: Session, ingredient_name: str) -> Ingredient:
