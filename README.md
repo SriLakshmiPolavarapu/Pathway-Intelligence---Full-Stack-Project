@@ -1,6 +1,6 @@
 # Pathway RFP Pipeline
 
-Automated end-to-end system that parses a restaurant menu, finds ingredient pricing, discovers local distributors, sends RFP emails, and compares quotes — all programmatically.
+Automated end-to-end system that parses a restaurant menu, finds ingredient pricing, discovers local distributors, sends RFP emails, and compares quotes, programmatically.
 
 ## Restaurant Menu Source
 
@@ -45,7 +45,7 @@ Test: POST /step1/parse-menu with restaurant_name and menu_text. Or upload an im
 
 ## Step 2 — Ingredient Pricing Trends (USDA API)
 
-Queries the USDA MARS API for each extracted ingredient's recent pricing data. Stores price snapshots in the ingredient_price_snapshots table and computes trends (min, max, average, direction). Many specialty items like dressings and sauces aren't in USDA's database — the system handles this gracefully and logs zero snapshots without failing.
+Queries the USDA MARS API for each extracted ingredient's recent pricing data. Stores price snapshots in the ingredient_price_snapshots table and computes trends (min, max, average, direction). Many specialty items like dressings and sauces aren't in USDA's database, the system handles this gracefully and logs zero snapshots without failing.
 
 Test: POST /step2/fetch-pricing/{menu_source_id}. Verify with GET /step2/pricing-trends/{ingredient_id}.
 
