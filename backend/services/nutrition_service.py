@@ -5,8 +5,6 @@ from app.config import settings
 
 USDA_SEARCH_URL = "https://api.nal.usda.gov/fdc/v1/foods/search"
 
-# Approximate grams per unit by ingredient category / generic default.
-# These are good practical approximations for this take-home.
 GRAMS_PER_UNIT_DEFAULT = {
     "g": 1.0,
     "gram": 1.0,
@@ -26,7 +24,6 @@ GRAMS_PER_UNIT_DEFAULT = {
     "cloves": 5.0,
 }
 
-# More realistic ingredient-specific overrides
 INGREDIENT_UNIT_OVERRIDES = {
     "olive oil": {"tbsp": 13.5, "tsp": 4.5, "cup": 216.0},
     "butter": {"tbsp": 14.2, "tsp": 4.7, "cup": 227.0},
@@ -69,10 +66,7 @@ def search_food(food_name: str) -> Optional[Dict]:
 
 
 def extract_nutrition_per_100g(food_item: Dict) -> Dict:
-    """
-    USDA search results commonly expose nutrients per 100g.
-    We extract the four macros we need and treat them as per-100g values.
-    """
+    
     nutrients = food_item.get("foodNutrients", [])
 
     nutrition = {
