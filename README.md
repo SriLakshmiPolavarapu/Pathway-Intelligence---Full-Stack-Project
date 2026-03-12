@@ -4,15 +4,15 @@ Automated end-to-end system that parses a restaurant menu, finds ingredient pric
 
 ## Restaurant Menu Source
 
-Coastal Bistro — sample menu included in the UI, or upload any menu image.
+Coastal Bistro : sample menu included in the UI, or upload any menu image.
 
 ## Tech Stack
 
-Python, FastAPI, SQLAlchemy, SQLite, Google Gemini 2.0 Flash, USDA MARS API, OpenStreetMap (Nominatim + Overpass), Gmail SMTP, React 18.
+Python, FastAPI, SQLAlchemy, SQLite, Google Gemini 2.5 Flash, USDA MARS API, Gmail SMTP, React 18.
 
 ## Setup
 
-Prerequisites: Python 3.11+, Gemini API key, USDA API key, Gmail App Password (optional).
+Prerequisites: Python 3.11+, Gemini API key, USDA API key, Gmail App Password.
 
 Install dependencies:
 
