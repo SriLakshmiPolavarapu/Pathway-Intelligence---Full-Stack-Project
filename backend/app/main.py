@@ -1,20 +1,28 @@
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import Base, engine, get_db
-from app.models import Distributor, Ingredient, IngredientDistributorMatch, MenuSource, Recipe, RecipeIngredient, RFPEmail
+from app.models import (
+    Distributor, DistributorQuote, DistributorQuoteItem,
+    Ingredient, IngredientDistributorMatch,
+    MenuSource, Recipe, RecipeIngredient, RFPEmail,
+)
 from app.schemas import (
     IngredientDistributorMatchOut,
     IngredientPricingTrendOut,
     MenuSourceOut,
     ParseMenuRequest,
+    QuoteComparisonResponse,
+    QuoteItemOut,
+    QuoteOut,
     RFPEmailDetailOut,
     RFPEmailOut,
     SendRFPResponse,
     Step3FindDistributorsResponse,
+    SubmitQuoteRequest,
 )
 from services.distributor_service import find_and_store_distributors_for_menu, list_distributors_for_menu
 from services.email_service import send_rfp_emails_for_menu, list_rfp_emails_for_menu, get_rfp_email_detail
@@ -28,6 +36,13 @@ from services.nutrition_service import get_ingredient_nutrition
 from services.pricing_service import (
     build_trend_summary,
     fetch_and_store_pricing_for_ingredient,
+)
+from services.quote_service import (
+    compare_quotes_for_menu,
+    generate_followup_email,
+    list_quotes_for_menu,
+    receive_and_process_quote,
+    simulate_distributor_replies,
 )
 
 Base.metadata.create_all(bind=engine)
@@ -47,7 +62,7 @@ app.add_middleware(
 def root():
     return {
         "message": "Pathway RFP backend is running",
-        "step": "1, 2, 3 and 4",
+        "step": "1, 2, 3, 4 and 5",
         "health": "/health",
         "docs": "/docs",
     }
@@ -55,10 +70,9 @@ def root():
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok", "step": "1, 2, 3 and 4"}
+    return {"status": "ok", "step": "1, 2, 3, 4 and 5"}
 
 
-# ── Step 1: Parse Menu ─────────────────────────────────────────
 
 @app.post("/step1/parse-menu", response_model=MenuSourceOut)
 def step1_parse_menu(payload: ParseMenuRequest, db: Session = Depends(get_db)):
@@ -170,8 +184,6 @@ def list_parsed_menus(db: Session = Depends(get_db)):
 
     return [transform_menu_source(item) for item in menu_sources]
 
-
-# ── Step 2: Pricing ────────────────────────────────────────────
 
 @app.get("/step2/recipe-nutrition/{recipe_id}")
 def recipe_nutrition(recipe_id: int, db: Session = Depends(get_db)):
@@ -289,8 +301,6 @@ def pricing_trends(ingredient_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
-# ── Step 3: Find Distributors ──────────────────────────────────
-
 @app.post("/step3/find-distributors/{menu_source_id}", response_model=Step3FindDistributorsResponse)
 def find_distributors(menu_source_id: int, db: Session = Depends(get_db)):
     try:
@@ -338,9 +348,6 @@ def list_distributors(menu_source_id: int, db: Session = Depends(get_db)):
         }
         for match in matches
     ]
-
-
-# ── Step 4: Send RFP Emails ───────────────────────────────────
 
 @app.post("/step4/send-rfp-emails/{menu_source_id}", response_model=SendRFPResponse)
 def send_rfp_emails(menu_source_id: int, db: Session = Depends(get_db)):
@@ -391,8 +398,86 @@ def rfp_email_detail(email_id: int, db: Session = Depends(get_db)):
         "error_message": email.error_message,
     }
 
+@app.post("/step5/simulate-replies/{menu_source_id}")
+def simulate_replies(menu_source_id: int, db: Session = Depends(get_db)):
+    try:
+        results = simulate_distributor_replies(db=db, menu_source_id=menu_source_id)
+        return {
+            "menu_source_id": menu_source_id,
+            "replies_processed": len(results),
+            "results": results,
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-# ── Helper ─────────────────────────────────────────────────────
+
+@app.post("/step5/submit-quote/{menu_source_id}")
+def submit_quote(menu_source_id: int, payload: SubmitQuoteRequest, db: Session = Depends(get_db)):
+    try:
+        result = receive_and_process_quote(
+            db=db,
+            menu_source_id=menu_source_id,
+            distributor_id=payload.distributor_id,
+            email_text=payload.email_text,
+        )
+        return result
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.get("/step5/quotes/{menu_source_id}", response_model=List[QuoteOut])
+def list_quotes(menu_source_id: int, db: Session = Depends(get_db)):
+    quotes = list_quotes_for_menu(db=db, menu_source_id=menu_source_id)
+    return [
+        {
+            "id": q.id,
+            "distributor_id": q.distributor_id,
+            "distributor_name": q.distributor.name,
+            "items_count": len(q.items),
+            "delivery_lead_days": q.delivery_lead_days,
+            "payment_terms": q.payment_terms,
+            "delivery_notes": q.delivery_notes,
+            "status": q.status,
+            "items": [
+                {
+                    "id": item.id,
+                    "ingredient_name": item.ingredient_name,
+                    "ingredient_id": item.ingredient_id,
+                    "unit_price": item.unit_price,
+                    "unit": item.unit,
+                    "minimum_order_quantity": item.minimum_order_quantity,
+                    "minimum_order_unit": item.minimum_order_unit,
+                    "notes": item.notes,
+                }
+                for item in q.items
+            ],
+        }
+        for q in quotes
+    ]
+
+
+@app.get("/step5/compare/{menu_source_id}", response_model=QuoteComparisonResponse)
+def compare_quotes(menu_source_id: int, db: Session = Depends(get_db)):
+    try:
+        return compare_quotes_for_menu(db=db, menu_source_id=menu_source_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/step5/followup/{quote_id}")
+def followup_quote(quote_id: int, db: Session = Depends(get_db)):
+    try:
+        return generate_followup_email(db=db, quote_id=quote_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 def transform_menu_source(menu_source: MenuSource):
     return {
