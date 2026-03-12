@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pathway RFP Pipeline - Step 1</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 1000px;
+      margin: 40px auto;
+      padding: 0 20px;
+      background: #f7f7f9;
+      color: #222;
+    }
+    .card {
+      background: white;
+      padding: 20px;
+      margin-bottom: 20px;
+      border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+    }
+    textarea, input {
+      width: 100%;
+      padding: 10px;
+      margin-top: 8px;
+      margin-bottom: 16px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+    button {
+      background: #111827;
+      color: white;
+      border: none;
+      padding: 12px 18px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    button:hover {
+      opacity: 0.9;
+    }
+    pre {
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      background: #111827;
+      color: #e5e7eb;
+      padding: 16px;
+      border-radius: 8px;
+      overflow-x: auto;
+    }
+    .recipe {
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 12px;
+      margin: 10px 0;
+      background: #fafafa;
+    }
+    .ingredient {
+      margin-left: 16px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Pathway RFP Pipeline - Step 1</h1>
+    <p>Parse a restaurant menu into recipes + ingredients and store them in SQLite.</p>
+
+    <label>Restaurant Name</label>
+    <input type="text" id="restaurantName" placeholder="Optional" />
+
+    <label>Menu URL</label>
+    <input type="text" id="menuUrl" placeholder="Paste a restaurant menu URL" />
+
+    <label>OR Menu Text</label>
+    <textarea id="menuText" rows="12" placeholder="Paste menu text here"></textarea>
+
+    <button onclick="parseMenu()">Run Step 1</button>
+  </div>
+
+  <div class="card">
+    <h2>Result</h2>
+    <div id="result"></div>
+  </div>
+
+  <script>
+    async function parseMenu() {
+      const restaurantName = document.getElementById("restaurantName").value.trim();
+      const menuUrl = document.getElementById("menuUrl").value.trim();
+      const menuText = document.getElementById("menuText").value.trim();
+      const resultDiv = document.getElementById("result");
+
+      resultDiv.innerHTML = "<p>Processing...</p>";
+
+      const payload = {
+        restaurant_name: restaurantName || null,
+        menu_url: menuUrl || null,
+        menu_text: menuText || null
+      };
+
+      try {
+        const response = await fetch("http://127.0.0.1:8000/step1/parse-menu", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          resultDiv.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+          return;
+        }
+
+        renderResult(data);
+      } catch (error) {
+        resultDiv.innerHTML = `<pre>${error.message}</pre>`;
+      }
+    }
+
+    function renderResult(data) {
+      const resultDiv = document.getElementById("result");
+
+      let html = `
+        <p><strong>Restaurant:</strong> ${data.restaurant_name || "N/A"}</p>
+        <p><strong>Source Type:</strong> ${data.source_type}</p>
+        <p><strong>Recipes Parsed:</strong> ${data.recipes.length}</p>
+      `;
+
+      data.recipes.forEach(recipe => {
+        html += `
+          <div class="recipe">
+            <h3>${recipe.dish_name}</h3>
+            <p><strong>Description:</strong> ${recipe.description || "N/A"}</p>
+            <p><strong>Serving Size:</strong> ${recipe.estimated_serving_size || "N/A"}</p>
+            <p><strong>Ingredients:</strong></p>
+            <ul>
+              ${recipe.ingredients.map(ing => `
+                <li class="ingredient">
+                  ${ing.ingredient_name}
+                  ${ing.quantity !== null && ing.quantity !== undefined ? `- ${ing.quantity}` : ""}
+                  ${ing.unit || ""}
+                  ${ing.preparation_notes ? `(${ing.preparation_notes})` : ""}
+                  ${ing.confidence_note ? `- [${ing.confidence_note}]` : ""}
+                </li>
+              `).join("")}
+            </ul>
+          </div>
+        `;
+      });
+
+      resultDiv.innerHTML = html;
+    }
+  </script>
+</body>
+</html>
