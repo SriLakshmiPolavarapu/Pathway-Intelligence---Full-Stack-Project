@@ -3,6 +3,10 @@ from typing import List, Optional
 from pydantic import BaseModel, Field, HttpUrl
 
 
+# -------------------------
+# Step 1 - Menu Parsing
+# -------------------------
+
 class ParseMenuRequest(BaseModel):
     restaurant_name: Optional[str] = None
     menu_text: Optional[str] = None
@@ -32,6 +36,10 @@ class ParsedMenuResponse(BaseModel):
     restaurant_name: Optional[str] = None
     recipes: List[ParsedRecipe]
 
+
+# -------------------------
+# Step 1 DB Response
+# -------------------------
 
 class RecipeIngredientOut(BaseModel):
     ingredient_name: str
@@ -67,6 +75,10 @@ class MenuSourceOut(BaseModel):
         from_attributes = True
 
 
+# -------------------------
+# Step 2 - Pricing
+# -------------------------
+
 class PriceSnapshotOut(BaseModel):
     id: int
     commodity_name: str
@@ -97,3 +109,81 @@ class IngredientPricingTrendOut(BaseModel):
     trend: str
     latest_unit: Optional[str] = None
     snapshots: List[PriceSnapshotOut]
+
+
+# -------------------------
+# Step 3 - Distributors
+# -------------------------
+
+class DistributorOut(BaseModel):
+    id: int
+    name: str
+    category: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    address: Optional[str] = None
+    phone: Optional[str] = None
+    website: Optional[str] = None
+    email: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    source: str
+
+    class Config:
+        from_attributes = True
+
+
+class IngredientDistributorMatchOut(BaseModel):
+    ingredient_id: int
+    ingredient_name: str
+    distributor_id: int
+    distributor_name: str
+    matched_category: Optional[str] = None
+    confidence_score: Optional[float] = None
+    rationale: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class Step3FindDistributorsResponse(BaseModel):
+    menu_source_id: int
+    restaurant_name: Optional[str] = None
+    city: str
+    state: str
+    distributor_count: int
+    match_count: int
+    matches: List[IngredientDistributorMatchOut]
+
+
+# -------------------------
+# Step 4 - RFP Emails
+# -------------------------
+
+class RFPEmailOut(BaseModel):
+    id: int
+    distributor_id: int
+    distributor_name: str
+    to_email: str
+    subject: str
+    ingredient_count: int
+    quote_deadline: Optional[str] = None
+    status: str
+    error_message: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class RFPEmailDetailOut(RFPEmailOut):
+    body_text: str
+    body_html: Optional[str] = None
+
+
+class SendRFPResponse(BaseModel):
+    menu_source_id: int
+    restaurant_name: str
+    emails_sent: int
+    mock_mode: bool
+    quote_deadline: str
+    results: list
